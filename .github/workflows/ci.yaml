@@ -1,6 +1,8 @@
 name: Iris ML - CI pipeline - CSE
-
+# define when Github should run this workflow
 on:
+
+# Run CI whenever code is pushed to main branch 
   push:
     branches:
       - main
@@ -8,29 +10,41 @@ on:
     branches:
       - main
 
+# permissions are restricted to read repo content
 permissions:
   contents: read
 
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+# download repo content Without you wont have required files
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+# install python devepndencies
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+# intalling requirements
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
-
+# testing
       - name: Run automated tests
         run: python -m pytest -v
-
+# dockerizing
       - name: Build Docker image
         run: docker build -t iris-ml-api:${{ github.sha }} .
+
+# . search docker file
+# $ is part of GitHub Actions’ expression syntax: ${{ ... }} tells Actions to evaluate the value inside the braces.
+# In this command:
+# ${{ github.sha }} is replaced with the commit’s SHA, so the Docker image gets a tag unique to that commit.
+# # starts a YAML comment. Anything after it on that line is ignored—it won’t be evaluated or passed to Docker.
+
+
+

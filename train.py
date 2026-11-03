@@ -1,9 +1,20 @@
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 import joblib
 from pathlib import Path
+import mlflow
+import mlflow.sklearn
+# Client API lets us registered models and their aliases
+from mlflow import MlflowClient
+
+
+# Configure mlflow tracking
+mlflow.set_tracking_uri("http://127.0.0.1:7001/")
+
+# Group related training runs under one experiment
+mlflow.set_experiment("iris-classification")
 
 
 
@@ -18,17 +29,94 @@ X_train, X_test, y_train, y_test = train_test_split(
     stratify=iris.target,
 )
 
-model = RandomForestClassifier(n_estimators=100, random_state=42)
-model.fit(X_train, y_train)
+n_estimators= 10
+random_state= 42
 
-predictions = model.predict(X_test)
-accuracy = accuracy_score(y_test, predictions)
-print(f"Test accuracy: {accuracy:.2%}")
+model_parameters= {
+    "model_type": "RandomForestClassifier",
+    "n_estimators": n_estimators,
+    "random_state": random_state,
+    "test_size": 0.65    
+}
+# Start a tracked training run
+with mlflow.start_run() as run:
+    # Record the rtraining configuration before model fitting
+    mlflow.log_params(model_parameters)
 
-model_dir = Path(__file__).resolve().parent / "models"
-model_dir.mkdir(parents=True, exist_ok=True)
-model_path = model_dir / "iris_model.joblib"
-joblib.dump(model, model_path)
-print(f"Model saved to: {model_path}")
+    # Build classifier using selected parameters
+    model = RandomForestClassifier(n_estimators=n_estimators, random_state=random_state)
+    model.fit(X_train, y_train)
+
+    predictions = model.predict(X_test)
+
+    accuracy = accuracy_score(y_test, predictions)
+    print(f"Test accuracy: {accuracy}")
+
+    # Calcualte the precision
+    precision = precision_score(y_test, predictions, average="macro", zero_division=0)
+    print(f"Precision: {precision}")
+
+    # Calculate the recall
+    recall = recall_score(y_test, predictions, average="macro", zero_division=0)
+    print(f"Recall: {recall}")
+
+    # Add the model quality gate
+    # Define the threshold acceptable test accuracy for now
+    MIN_TEST_ACCURACY= 0.90
+    if accuracy <MIN_TEST_ACCURACY:
+        raise ValueError(
+            f"Model rejected: test accuracy: {accuracy: .2f}"
+            f"is below the required {MIN_TEST_ACCURACY}"
+        )
+    print("Model quality gate Passed...")
+
+    mlflow.log_metrics({
+        "test_accuracy":accuracy,
+        "test_precision": precision,
+        "test_recall": recall
+    })
+
+    # Save the trained model
+    model_dir = Path(__file__).resolve().parent / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model_path = model_dir / "iris_model.joblib"
+    joblib.dump(model, model_path)
+    print(f"Model saved to: {model_path}")
+
+    # Model registration
+    mlflow.sklearn.log_model(
+        sk_model=model,
+        name="iris_model",
+        registered_model_name="iris-classifier",
+        skops_trusted_types=[
+            "sklearn.tree._tree.Tree"
+        ]
+    )
+
+    # Assign the champion alias to the new registered model
+    client= MlflowClient()
+    # Identify the current training run
+    # We use this ID to find the model version registered by this particular ID
+    current_run_id= mlflow.active_run().info.run_id
+
+    # Retrieve all version registered under this model name
+    registered_versions = client.search_model_versions(
+        "name = 'iris-classifier'"
+    )
 
 
+    # Find the version created by the curretn training run
+    current_model_version= next(
+        (
+            version for version in registered_versions
+            if version.run_id == current_run_id
+        ),
+        None
+    )
+    client.set_registered_model_alias(
+        name="iris-classifier",
+        alias="champion",
+        version=current_model_version.version
+    )
+
+    print("Registered Model: iris_classifier")

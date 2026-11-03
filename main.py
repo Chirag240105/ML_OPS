@@ -1,37 +1,109 @@
 from pathlib import Path
-
 import joblib
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
+import mlflow
+import mlflow.sklearn
+import numpy as np
+import os
+from contextlib import asynccontextmanager
+from typing import Callable
 
 
-MODEL_PATH = Path(__file__).resolve().parent / "models" / "iris_model.joblib"
-model = joblib.load(MODEL_PATH)
-class_names = ["setosa", "versicolor", "virginica"]
+# MLFlow Configuration
+MLFLOW_TRACKING_URI = os.getenv(
+    "MLFLOW_TRACKING_URI", "http://127.0.0.1:7001"
+)
 
-app = FastAPI(title="Iris Random Forest API")
+# model:/iris-classifier@champion
+MODEL_URI = "models:/iris-classifier@champion"
 
+def load_mlflow_model():
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    model = mlflow.sklearn.load_model(MODEL_URI)
+    return model
 
 class IrisInput(BaseModel):
     sepal_length: float = Field(gt=0)
     sepal_width: float = Field(gt=0)
     petal_length: float = Field(gt=0)
     petal_width: float = Field(gt=0)
-# above class is validation check 
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+def create_app(model_loader: Callable=load_mlflow_model, version_loader: Callable=None):
 
 
-@app.post("/predict")
-def predict(iris: IrisInput):
-    features = [[
-        iris.sepal_length,
-        iris.sepal_width,
-        iris.petal_length,
-        iris.petal_width,
-    ]]
-    print(features)
-    prediction = int(model.predict(features)[0])
-    return {"Prediction_class": prediction, "class_name": class_names[prediction]}
+    if version_loader is None: 
+        def version_loader():
+            client = mlflow.MlflowClient(
+                tracking_uri=MLFLOW_TRACKING_URI
+            )
+
+            champion_version = client.get_model_version_by_alias(
+                name= "iris-classifier",
+                alias="champion"
+            )
+            return champion_version.version
+    
+    @asynccontextmanager
+    def lifespan(app:FastAPI):
+        try:
+            app.state.model = model_loader()
+        except Exception as ex:
+            raise RuntimeError(
+                f"Failed to load model: {ex}"
+            )
+        client = mlflow.MlflowClient(
+            tracking_uri=MLFLOW_TRACKING_URI
+        )
+        champion_version = client.get_model_version_by_alias(
+            name="iris-classifier",
+            alias="champion"
+        )
+
+        app.state.model_version = version_loader()
+        yield
+#   The yield keyword in Python is used to create generator functions. It acts similarly to a return statement,
+#   but instead of terminating the function and destroying its local state, yield suspends execution and returns a value to the caller while
+#   preserving the function's state. When the function is called again, it resumes exactly where it left off
+
+
+    app = FastAPI(
+        title="Iris Classification API",
+        description="Iris prediction API powered by MLFlow",
+        version="3.0.0",
+        lifespan=lifespan
+    )
+        
+    @app.get("/")
+    def ready_to_serve():
+        return {"status": "Ready to serve"}
+
+    @app.get("/health")
+    def health_check():
+        return {
+            "status": "healthy",
+            "model_name": "iris-classification",
+            "model_version": app.state.model_version
+            }
+
+    # Endpoint for making predictions with the Iris Random Forest model
+    @app.post("/predict")
+    def predict(data: IrisInput):
+        model = Request.app.state.model
+        features = [[
+            data.sepal_length,
+            data.sepal_width,
+            data.petal_length,
+            data.petal_width
+        ]]
+        prediction = int(model.predict(features)[0]) #app.state.model se nahi hoga as it is post not get 
+        print("Prediction is",prediction)
+        return {
+            "prediction": prediction,
+            "class_name": ["setosa", "versicolor", "virginica"][prediction]
+        }
+
+# Production application instance
+
+app = create_app()
+
