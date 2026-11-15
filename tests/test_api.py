@@ -29,7 +29,7 @@ def client():
 # we create fake model because we need to test api keys not model but now it depends on model-flow so we create fake-model
 
 
-def test_health_endpoint():
+def test_health_endpoint(client):
     
     '''
       Verify that the application is running and can respond to health check request
@@ -39,10 +39,10 @@ def test_health_endpoint():
 
     assert response.status_code == 200
     #checking response.body
-    assert response.json() == {"status":"healthy"}
+    assert response.json()["status"] == "healthy"
     assert response.json()["model_version"] == "test_version"
 
-def test_valid_iris_prediction():
+def test_valid_iris_prediction(client):
 
     '''
       verify that valid flower measurements produce a prediction
@@ -65,15 +65,15 @@ def test_valid_iris_prediction():
     result = response.json()
     
     # then check contracts : both fields must exists
-    assert "Prediction_class" in result
+    assert "prediction" in result
     assert "class_name" in result
     
     #predicted class must be one of three iris class_names = ["setosa", "versicolor", "virginica"]
     assert result["class_name"] in ["setosa", "versicolor", "virginica"]
     #prediction must be 0,1,2
-    assert result["Prediction_class"] in [0,1,2]
+    assert result["prediction"] in [0,1,2]
 
-def test_iris_input():
+def test_iris_input(client):
     """
     verify that invalid inputs are reject by fast api
 

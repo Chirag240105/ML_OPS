@@ -1,6 +1,6 @@
 from pathlib import Path
 import joblib
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import mlflow
 import mlflow.sklearn
@@ -45,21 +45,13 @@ def create_app(model_loader: Callable=load_mlflow_model, version_loader: Callabl
             return champion_version.version
     
     @asynccontextmanager
-    def lifespan(app:FastAPI):
+    async def lifespan(app: FastAPI):
         try:
             app.state.model = model_loader()
         except Exception as ex:
             raise RuntimeError(
                 f"Failed to load model: {ex}"
             )
-        client = mlflow.MlflowClient(
-            tracking_uri=MLFLOW_TRACKING_URI
-        )
-        champion_version = client.get_model_version_by_alias(
-            name="iris-classifier",
-            alias="champion"
-        )
-
         app.state.model_version = version_loader()
         yield
 #   The yield keyword in Python is used to create generator functions. It acts similarly to a return statement,
@@ -89,7 +81,7 @@ def create_app(model_loader: Callable=load_mlflow_model, version_loader: Callabl
     # Endpoint for making predictions with the Iris Random Forest model
     @app.post("/predict")
     def predict(data: IrisInput):
-        model = Request.app.state.model
+        model = app.state.model
         features = [[
             data.sepal_length,
             data.sepal_width,
@@ -102,6 +94,8 @@ def create_app(model_loader: Callable=load_mlflow_model, version_loader: Callabl
             "prediction": prediction,
             "class_name": ["setosa", "versicolor", "virginica"][prediction]
         }
+
+    return app
 
 # Production application instance
 
