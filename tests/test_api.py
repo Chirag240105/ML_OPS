@@ -1,13 +1,36 @@
 from fastapi.testclient import TestClient
-
+import pytest
 #import the application object defined in main.py
-from main import app 
+from main import create_app 
 
 # create reusable test client for all the functions
-client = TestClient(app)
+# client = TestClient(create)
+
+
+class fake_iris_model:
+    def predict(self, features):
+        return [0]
+
+def fake_model_loader():
+    return fake_iris_model()
+
+def fake_version_loader():
+    return "test_version"
+
+@pytest.fixture
+def client():
+  app = create_app(
+      model_loader=fake_model_loader,
+      version_loader=fake_version_loader,
+  )
+  with TestClient(app) as  test_client:
+      yield test_client
+
+# we create fake model because we need to test api keys not model but now it depends on model-flow so we create fake-model
+
 
 def test_health_endpoint():
-
+    
     '''
       Verify that the application is running and can respond to health check request
     assert is like if else if code correct then good if not then assertion error
@@ -17,6 +40,7 @@ def test_health_endpoint():
     assert response.status_code == 200
     #checking response.body
     assert response.json() == {"status":"healthy"}
+    assert response.json()["model_version"] == "test_version"
 
 def test_valid_iris_prediction():
 
