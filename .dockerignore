@@ -1,3 +1,12 @@
 .venv/
-__pycache__
+__pycache__/
 .env
+.git/
+.github/
+.pytest_cache/
+mlartifacts/
+mlflow.db
+tests/
+train.py
+Machine.MD
+*.md

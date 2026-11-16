@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# MLflow local databases & artifacts
+mlflow.db
+mlartifacts/
+outputs/
+
+# Environment files
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+

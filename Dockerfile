@@ -1,19 +1,23 @@
-#start with light weight python image
-#This gives our container a python runtime
-FROM python:3.14-slim
+# Base image must match the Python version used during training (3.13)
+FROM python:3.13-slim
 
-#set the working directory inside the container 
+# Set working directory
 WORKDIR /app
 
+# Install dependencies first (cached layer unless requirements change)
 COPY requirements.txt .
-
-#if model is in cache take that from there here we are not using 
-# avoid retaining pip's download cache in the image 
 RUN pip install --no-cache-dir -r requirements.txt
 
-#copy the application code and saved into /app fisrt dot source and second for destination[.]
-COPY . . 
+# Copy application code, model artefact, and the model class definition.
+# src/ must be present so Python can find riskstream_model.RiskStreamModel
+# when joblib unpickles the artefact.
+COPY main.py .
+COPY models/ models/
+COPY src/ src/
+
+# Put src/ on the Python path so 'import riskstream_model' resolves correctly
+ENV PYTHONPATH=/app/src
 
 EXPOSE 8000
-#0.0.0.0 allowing all connection through container the containers network interface
+
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
