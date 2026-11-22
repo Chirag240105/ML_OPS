@@ -8,7 +8,6 @@ on:
     branches:
       - main
 
-# Restrict permissions to read-only for the repository contents
 permissions:
   contents: read
 
@@ -42,7 +41,7 @@ jobs:
 
   build-and-push:
     name: Build and Publish to Amazon ECR
-    needs: test
+    needs: test-and-build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
